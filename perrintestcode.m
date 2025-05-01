@@ -153,23 +153,30 @@ hold off
 % STEP 3: AVERAGING WEEKLY DATA AND PLOTTING ALL DAYS ON ONE GRAPH
 % Excluding data from February 14 and February 27
 
-% Create a 3D matrix to hold all 28 days: day x time x week
+% Combine all weeks into a 3D matrix: day x time x week
 all_data = cat(3, week1, week2, week3, week4);
 
-% Remove days 14 and 27 (convert to week+day indices)
-remove_days = [14, 27];
-remove_day_indices = mod(remove_days-1, 7) + 1; % day of week (1=Sunday)
-remove_week_indices = floor((remove_days-1)/7) + 1; % which week (1-4)
+% Days to remove (Feb 14 and 27)
+remove_days = [14, 27];  % day indices (1-based from Feb 1)
 
-% Zero out the days we want to ignore
+% Feb 1, 2025 is a Saturday → index 7 (assuming Sunday = 1)
+start_day_index = 7;
+
+% Compute correct weekday indices (1=Sunday, ..., 7=Saturday)
+remove_day_indices = mod(start_day_index + remove_days - 2, 7) + 1;
+
+% Compute which week they fall in
+remove_week_indices = floor((remove_days - 1) / 7) + 1;
+
+% Remove the data (set to NaN so it's excluded from average)
 for idx = 1:length(remove_days)
     d = remove_day_indices(idx);
     w = remove_week_indices(idx);
-    all_data(d,:,w) = NaN; % set to NaN so it's excluded in average
+    all_data(d,:,w) = NaN;
 end
 
-% Compute average, ignoring NaNs
-avg_week = mean(all_data, 3, 'omitnan'); % mean across 3rd dimension (weeks), ignoring NaNs
+% Compute average across weeks, ignoring NaNs
+avg_week = mean(all_data, 3, 'omitnan');
 
 % Open hour masks (1 = open, 0 = closed)
 open_mask = zeros(7,96);
@@ -189,7 +196,7 @@ open_mask(7,45:84) = 1;
 % Sunday (index 1): 12 AM–1 AM (1:4) and 11 AM–midnight (45:96)
 open_mask(1, [1:4, 45:96]) = 1;
 
-% Apply mask to average data
+% Apply open hour mask
 masked_avg_week = avg_week;
 masked_avg_week(open_mask == 0) = NaN;
 
@@ -202,7 +209,7 @@ for j = 1:7
     plot(time, masked_avg_week(j,:), 'Color', colors(j,:), 'LineWidth', 1.8)
 end
 
-% Set x-axis to clock times
+% Set x-axis to clock time labels
 xticks(0:60:1440)
 xticklabels({'12 AM','1 AM','2 AM','3 AM','4 AM','5 AM','6 AM','7 AM','8 AM',...
              '9 AM','10 AM','11 AM','12 PM','1 PM','2 PM','3 PM','4 PM',...
@@ -211,7 +218,61 @@ xticklabels({'12 AM','1 AM','2 AM','3 AM','4 AM','5 AM','6 AM','7 AM','8 AM',...
 xlim([0 1440])
 xlabel('Time of Day')
 ylabel('Average Occupancy')
-title('Average Library Occupancy by Day of the Week (During Open Hours, Feb 14 & 27 Excluded)')
+title('Average Library Occupancy by Day (Open Hours Only, Feb 14 & 27 Removed)')
 legend(days_of_the_week, 'Location', 'northwest')
+grid on
+hold off
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% STEP 4: COMPARE SPECIFIC VS. AVERAGE DAYS (Feb 14 & 27)
+
+% Manually pull Thursdays (index 5) and Fridays (index 6) from raw weeks
+all_thursdays = [week1(5,:); week2(5,:); week3(5,:); week4(5,:)];  % 4 Thursdays
+all_fridays   = [week1(6,:); week2(6,:); week3(6,:); week4(6,:)];  % 4 Fridays
+
+% Feb 27 = week 4 Thursday (row 4), Feb 14 = week 2 Friday (row 2)
+feb27_data = all_thursdays(4,:);
+feb14_data = all_fridays(2,:);
+
+% Averages without those dates
+avg_thursday = mean(all_thursdays([1 2 3],:), 'omitnan');
+avg_friday   = mean(all_fridays([1 3 4],:), 'omitnan');
+
+% Open hour masks
+friday_mask = zeros(1,96); friday_mask(33:84) = 1;
+thursday_mask = zeros(1,96); thursday_mask([1:4, 33:96]) = 1;
+
+% Apply masks (set closed hours to NaN)
+avg_friday(friday_mask == 0) = NaN;
+feb14_data(friday_mask == 0) = NaN;
+
+avg_thursday(thursday_mask == 0) = NaN;
+feb27_data(thursday_mask == 0) = NaN;
+
+% Plot
+figure
+hold on
+
+% Averages (dark colors)
+plot(time, avg_friday, 'Color', [0 0 0.5], 'LineWidth', 2.2)        % dark blue
+plot(time, avg_thursday, 'Color', [0 0.5 0], 'LineWidth', 2.2)      % dark green
+
+% Individual dates (light colors)
+plot(time, feb14_data, 'Color', [0.4 0.75 1], 'LineWidth', 2)       % light blue
+plot(time, feb27_data, 'Color', [0.5 1 0.5], 'LineWidth', 2)        % light green
+
+% Axes and labels
+xticks(0:60:1440)
+xticklabels({'12 AM','1 AM','2 AM','3 AM','4 AM','5 AM','6 AM','7 AM','8 AM',...
+             '9 AM','10 AM','11 AM','12 PM','1 PM','2 PM','3 PM','4 PM',...
+             '5 PM','6 PM','7 PM','8 PM','9 PM','10 PM','11 PM','12 AM'})
+
+xlim([0 1440])
+xlabel('Time of Day')
+ylabel('Occupancy')
+title('Occupancy Comparison: Feb 14 & 27 vs Weekly Averages')
+legend({'Avg. Friday (excl. Feb 14)', 'Avg. Thursday (excl. Feb 27)', ...
+        'Feb 14', 'Feb 27'}, ...
+        'Location', 'northwest')
 grid on
 hold off
