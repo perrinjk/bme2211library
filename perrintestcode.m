@@ -106,17 +106,20 @@ avg_week = (week1 + week2 + week3 + week4) / 4;
 % Open hour masks (1 = open, 0 = closed)
 open_mask = zeros(7,96);
 
-% Monday–Thursday: 8 AM–1 AM (8:00 = index 33, 1:00 = index 4 of next day → here we stop at midnight = 96)
-open_mask(2:5,33:96) = 1;
+% Monday (index 2): 12 AM–1 AM (1:4) and 8 AM–midnight (33:96)
+open_mask(2, [1:4, 33:96]) = 1;
 
-% Friday: 8 AM–9 PM → 33 to 84
+% Tuesday–Thursday (index 3–5): 12 AM–1 AM (1:4) and 8 AM–midnight (33:96)
+open_mask(3:5, [1:4, 33:96]) = 1;
+
+% Friday (index 6): 8 AM–9 PM (33:84)
 open_mask(6,33:84) = 1;
 
-% Saturday: 11 AM–9 PM → 45 to 84
+% Saturday (index 7): 11 AM–9 PM (45:84)
 open_mask(7,45:84) = 1;
 
-% Sunday: 11 AM–midnight = 45 to 96
-open_mask(1,45:96) = 1;
+% Sunday (index 1): 12 AM–1 AM (1:4) and 11 AM–midnight (45:96)
+open_mask(1, [1:4, 45:96]) = 1;
 
 % Apply masks (set closed times to NaN so MATLAB skips them when plotting)
 masked_avg_week = avg_week;
@@ -131,9 +134,84 @@ for j = 1:7
     plot(time, masked_avg_week(j,:), 'Color', colors(j,:), 'LineWidth', 1.8)
 end
 
-legend(days_of_the_week, 'Location', 'northwest')
-xlabel('Time of Day (minutes past midnight)')
+% Set x-axis to clock times
+xticks(0:60:1440) % every hour
+xticklabels({'12 AM','1 AM','2 AM','3 AM','4 AM','5 AM','6 AM','7 AM','8 AM',...
+             '9 AM','10 AM','11 AM','12 PM','1 PM','2 PM','3 PM','4 PM',...
+             '5 PM','6 PM','7 PM','8 PM','9 PM','10 PM','11 PM','12 AM'})
+
+xlim([0 1440])
+xlabel('Time of Day')
 ylabel('Average Occupancy')
 title('Average Library Occupancy by Day of the Week (During Open Hours)')
+legend(days_of_the_week, 'Location', 'northwest')
+grid on
+hold off
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% STEP 3: AVERAGING WEEKLY DATA AND PLOTTING ALL DAYS ON ONE GRAPH
+% Excluding data from February 14 and February 27
+
+% Create a 3D matrix to hold all 28 days: day x time x week
+all_data = cat(3, week1, week2, week3, week4);
+
+% Remove days 14 and 27 (convert to week+day indices)
+remove_days = [14, 27];
+remove_day_indices = mod(remove_days-1, 7) + 1; % day of week (1=Sunday)
+remove_week_indices = floor((remove_days-1)/7) + 1; % which week (1-4)
+
+% Zero out the days we want to ignore
+for idx = 1:length(remove_days)
+    d = remove_day_indices(idx);
+    w = remove_week_indices(idx);
+    all_data(d,:,w) = NaN; % set to NaN so it's excluded in average
+end
+
+% Compute average, ignoring NaNs
+avg_week = mean(all_data, 3, 'omitnan'); % mean across 3rd dimension (weeks), ignoring NaNs
+
+% Open hour masks (1 = open, 0 = closed)
+open_mask = zeros(7,96);
+
+% Monday (index 2): 12 AM–1 AM (1:4) and 8 AM–midnight (33:96)
+open_mask(2, [1:4, 33:96]) = 1;
+
+% Tuesday–Thursday (index 3–5): 12 AM–1 AM (1:4) and 8 AM–midnight (33:96)
+open_mask(3:5, [1:4, 33:96]) = 1;
+
+% Friday (index 6): 8 AM–9 PM (33:84)
+open_mask(6,33:84) = 1;
+
+% Saturday (index 7): 11 AM–9 PM (45:84)
+open_mask(7,45:84) = 1;
+
+% Sunday (index 1): 12 AM–1 AM (1:4) and 11 AM–midnight (45:96)
+open_mask(1, [1:4, 45:96]) = 1;
+
+% Apply mask to average data
+masked_avg_week = avg_week;
+masked_avg_week(open_mask == 0) = NaN;
+
+% Plot all 7 days on one graph
+figure
+hold on
+colors = lines(7); % get 7 distinct colors
+
+for j = 1:7
+    plot(time, masked_avg_week(j,:), 'Color', colors(j,:), 'LineWidth', 1.8)
+end
+
+% Set x-axis to clock times
+xticks(0:60:1440)
+xticklabels({'12 AM','1 AM','2 AM','3 AM','4 AM','5 AM','6 AM','7 AM','8 AM',...
+             '9 AM','10 AM','11 AM','12 PM','1 PM','2 PM','3 PM','4 PM',...
+             '5 PM','6 PM','7 PM','8 PM','9 PM','10 PM','11 PM','12 AM'})
+
+xlim([0 1440])
+xlabel('Time of Day')
+ylabel('Average Occupancy')
+title('Average Library Occupancy by Day of the Week (During Open Hours, Feb 14 & 27 Excluded)')
+legend(days_of_the_week, 'Location', 'northwest')
 grid on
 hold off
